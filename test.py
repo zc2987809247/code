@@ -94,28 +94,38 @@ def compute_threshold(img):
 
 
 # 绘制轮廓
-def draw_contours(img, mask):
+def draw_contours(img, mask,contours_area):
     # 转换为灰度图
     gray = cv.cvtColor(img, cv.COLOR_BGRA2GRAY)
     # 二值化处理
     ret, thresh = cv.threshold(gray, 127, 255, cv.THRESH_BINARY)
     # contours为轮廓的数据集list
     contours, hierarchy = cv.findContours(mask, cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
+    new_contours = []
+    for i in range(len(contours)):
+        area = cv.contourArea(contours[i], False)
+        if area > contours_area:
+            new_contours.append(contours[i])
 
     # 绘制轮廓
     draw_img = img.copy()
     # -1表示全部轮廓，（255，0，0）以BGR颜色绘制，2表示线条厚度
-    res = cv.drawContours(draw_img, contours, -1, (0, 0, 255), 1)
+    res = cv.drawContours(draw_img, new_contours, -1, (0, 0, 255), 1)
     return res
 
 
-def draw_defect(img, x, y):
-    # 将img分割成6块，x,y表示起始坐标，w，h表示宽和高
-    h = 800
-    w = 800
-    img_flag = cv.imread('img_model.jpg', cv.IMREAD_COLOR)
+def draw_defect(img, x, y, w, h, raster_num,contours_area):
+    # print(raster_num, type(raster_num))
+    if raster_num == 4:
+        img_flag = cv.imread('img_model.jpg', cv.IMREAD_COLOR)
+        # print(img_flag.shape)
+    elif raster_num == 3:
+        img_flag = cv.imread('img_model2.jpg', cv.IMREAD_COLOR)
+    else:
+        print("ERROR!")
 
-    img1 = img[y:y + 800, x + 20 :x + 800]
+    img_flag = cv.resize(img_flag, (w - 20, h))
+    img1 = img[y:y + h, x + 20:x + w]
     # img_flag = img_flag[0:800, 20:800]
     # 转换为灰度图
     gray = cv.cvtColor(img1, cv.COLOR_BGRA2GRAY)
@@ -129,134 +139,52 @@ def draw_defect(img, x, y):
     thresh = ~thresh
     thresh_flag = ~thresh_flag
 
+    # 卷积核
     kernel = np.ones((3, 3), dtype=np.uint8)
-    thresh_flag = cv.dilate(thresh_flag, kernel, 1)
-    add_img = np.hstack([thresh, thresh_flag])
-    # cv_show(add_img)
-    ret = thresh - thresh_flag
-    # cv_show(ret)
-    ret = ~ret
-
-    # dilate = cv.dilate(ret, kernel, 1) # 膨胀操作
-    # 对ret进行闭运算， mask是处理之后的缺陷图
-    mask = cv.morphologyEx(ret, cv.MORPH_CLOSE, kernel)
-
-    # cv_show(mask)
-    # add_img是原图和缺陷图的对比
-
-    # cv_show(add_img)
-
-    # 绘制出处理之后的结果图的轮廓
-    return draw_contours(img1, mask)
-
-
-def draw_defect2(img, x, y):
-    # 将img分割成6块，x,y表示起始坐标，w，h表示宽和高
-    h = 700
-    w = 700
-    img_flag = cv.imread('img_model2.jpg', cv.IMREAD_COLOR)
-
-    img1 = img[y:y + 700, x:x + 700]
-    # img_flag = img_flag[0:800, 20:800]
-    # 转换为灰度图
-    gray = cv.cvtColor(img1, cv.COLOR_BGRA2GRAY)
-    gray_flag = cv.cvtColor(img_flag, cv.COLOR_BGRA2GRAY)
-
-    x = compute_threshold(gray)
-    # 二值化处理,阈值220对于污渍检测效果号，阈值170对于裂纹检测效果好
-    ret, thresh = cv.threshold(gray, x, 255, cv.THRESH_BINARY)
-    ret_flag, thresh_flag = cv.threshold(gray_flag, 127, 255, cv.THRESH_BINARY)
-    # 去除横线部分
-    thresh = ~thresh
-    thresh_flag = ~thresh_flag
-
-    kernel = np.ones((3, 3), dtype=np.uint8)
+    # 对模板图进行膨胀操作
     thresh_flag = cv.dilate(thresh_flag, kernel, 1)
     # add_img = np.hstack([thresh, thresh_flag])
     # cv_show(add_img)
     ret = thresh - thresh_flag
-    # cv_show(ret)
     ret = ~ret
-    # dilate = cv.dilate(ret, kernel, 1) # 膨胀操作
-    # 对ret进行闭运算， mask是处理之后的缺陷图
+
+    # 对ret进行闭运算，先膨胀在腐蚀 mask是处理之后的缺陷图
     mask = cv.morphologyEx(ret, cv.MORPH_CLOSE, kernel)
-    # cv_show(mask)
-    # add_img是原图和缺陷图的对比
-
-    # cv_show(add_img)
-
     # 绘制出处理之后的结果图的轮廓
-    return draw_contours(img1, mask)
+    return draw_contours(img1, mask,contours_area)
 
 
-def upload(filepath):
+
+
+def upload(filepath, horizontal_num, vertical_num, raster_num,contours_area):
     # 读取图片，cv.IMREAD_COLOR,转换成3通道RGB颜色
     img = cv.imread(filepath, cv.IMREAD_COLOR)
     # h,w表示图片的高度和宽度
     h = img.shape[0]
     w = img.shape[1]
-    block_h = h//2
-    block_w = w//3
+    block_h = h // vertical_num
+    block_w = w // horizontal_num
     x = 0
     y = 0
 
     image = np.zeros((img.shape[0], img.shape[1], 3), np.uint8)
     while y < h:
         while x < w:
-            if h == 1600 and w == 2400:
-                image[y:y + block_h, x:x + block_w -20] = draw_defect(img, x, y)
-            else:
-                image[y:y + block_h, x:x + block_w ] = draw_defect2(img, x, y)
+            image[y:y + block_h, x:x + block_w - 20] = draw_defect(img, x, y, block_w, block_h, raster_num,contours_area)
             x = x + block_w
         x = 0
         y = y + block_w
 
-    image = cv.resize(image,(1800,960))
+    image = cv.resize(image, (1800, 960))
     cv_show(image)
     return 1
 
 
-def download(filepath):
-    # 读取图片，cv.IMREAD_COLOR,转换成3通道RGB颜色
-    img = cv.imread(filepath, cv.IMREAD_COLOR)
-    # 判断图片格式是否正确,格式不正确返回-1
-    if img.shape[0] != 1600 or img.shape[1] != 2400:
-        return -1
-
-    x = 0
-    y = 0
-    image = np.zeros((img.shape[0], img.shape[1], 3), np.uint8)
-
-    while y < 1600:
-        while x < 2400:
-            image[y:y + 800, x:x + 780] = draw_defect(img, x, y)
-            x = x + 800
-        x = 0
-        y = y + 800
-    cv.imwrite()
-    return 1
-
 
 # # 读取图片，cv.IMREAD_COLOR,转换成3通道RGB颜色
-# img = cv.imread('sgEL_01_changed.jpg', cv.IMREAD_COLOR)
-# draw_defect2(img, 0, 0)
+# img = cv.imread('sgEL_setup_01.JPG', cv.COLOR_BGRA2GRAY)
 
-# for contour in contours:
-#     # 求轮廓面积
-#     area = cv.contourArea(contour)
-#     if 500 < area <= 15000:
-#         # 得到覆盖轮廓的最小矩形，
-#         x, y, w, h = cv.boundingRect(contour)
-#         # 从img截取图像
-#         ret = img1[y:y + h, x: x + w]
-#         # 提取缺陷
-#         gray = cv.cvtColor(ret, cv.COLOR_BGR2GRAY)
-#         thresh = cv.threshold(gray, 135, 250, cv.THRESH_BINARY_INV)[1]
-#         contours, hierarchy = cv.findContours(thresh, cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
-#         # zeros返回搞定大小的全是0的数组，astype转化数据类型为gray.dtype
-#         mask = np.zeros(gray.shape).astype(gray.dtype)
-#         # 在mask上绘制多边形，顶点集为contours
-#         cv.fillPoly(mask, contours, (255, 255, 255))
-#         # 对图像进行与操作
-#         result = cv.bitwise_and(gray, mask)
-#         cv_show(result)
+
+
+
+
